@@ -1,0 +1,121 @@
+// New to Stylus? Check out http://learnboost.github.io/stylus
+// Use modern CSS thanks to Autoprefixer: https://github.com/ai/autoprefixer
+
+// Import CSS from "node_modules" and "bower_components"
+// thanks to Stylus' "import css" and "paths" options
+@import url('http://fonts.googleapis.com/css?family=Merriweather:300italic,300,700|Roboto:100,100italic,300,300italic');
+@import 'normalizecss/normalize.css'
+
+@import 'prism/themes/prism-okaidia.css'
+@import 'styles/slides.styl'
+// Check out "bower_components/prism/themes/" for available themes
+
+// Style using Bespoke Classes: https://github.com/markdalgleish/bespoke-classes
+h1
+  font-family: "Merriweather",serif;
+  font-weight: 100
+  font-style: italic
+  font-size: 2em
+  text-align: center
+
+h1 strong
+  font-style: normal
+
+a
+  color: white
+
+ul.no-style
+  list-style: none
+img.inline
+  display: inline
+  vertical-align: bottom
+img.stack
+  margin: 5%
+img.center
+  margin: 0 auto
+  display: block
+img.browser
+  margin: 0 auto
+  display: block
+  height: 40%;
+pre.small-font
+  font-size: .4em
+
+pre.smaller-font
+  font-size: .6em
+
+.bespoke-parent
+  text-size-adjust: auto
+  position: absolute
+  top: 0
+  left: 0
+  right: 0
+  bottom: 0
+  overflow: hidden
+  background: black
+  color: white
+  font-family: "Roboto",sans-serif;
+  font-weight: 100;
+  font-size: 2em;
+
+.bespoke-scale-parent
+  position: absolute
+  top: 0
+  left: 0
+  right: 0
+  bottom: 0
+  pointer-events: none
+  .bespoke-active
+    pointer-events: auto
+
+.bespoke-slide
+  width: 100%
+  height: 100%
+  transform-origin: 50% 50%
+  transform: translate(-50%, -50%)
+  top: 50%
+  left: 50%
+  position: absolute
+  display: flex
+  flex-direction: column
+  justify-content: center
+  align-items: center
+
+.bespoke-inactive
+  opacity: 0
+  pointer-events: none
+
+.bespoke-bullet-inactive
+  opacity: 0
+  pointer-events: none
+
+.bespoke-backdrop
+  position: absolute
+  top: 0
+  left: 0
+  right: 0
+  bottom: 0
+  z-index: -1
+  opacity: 0
+
+.bespoke-backdrop-active
+  opacity: 1
+
+.bespoke-progress-parent
+  position: absolute
+  top: 0
+  left: 0
+  right: 0
+  height: .3vw
+
+.bespoke-progress-bar
+  position: absolute
+  height: 100%
+  background: #ccc
+  transition: width .6s ease
+
+.emphatic
+  background: #222
+
+.emphatic-text
+  color: white
