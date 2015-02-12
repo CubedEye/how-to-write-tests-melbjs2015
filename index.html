@@ -1,0 +1,852 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+    <title>How to write tests that don't suck</title>
+    <link rel="stylesheet" type="text/css" href="build/build.css">
+  </head>
+  <body>
+    <article>
+      <section>
+        <h1>
+          Writing tests that don't suck<br/>
+          &nbsp;
+        </h1>
+        <div class="title-info">
+          <div><img src="/images/stile-logo.png"></div>
+          <div>
+            <p>Steven Robinson</p>
+            <p>CTO at Stile</p>
+            <p><a href="https://twitter.com/cubedeye">@cubedeye</a></p>
+          </div>
+        </div>
+      </section>
+      <section>
+        <h1>A bit about &nbsp;<img src="/images/stile-logo.png" class="inline"></h1>
+        <ul>
+          <li>Stile is an multi-tenant eLearning platform.</li>
+          <li>Focus around easy of use for teachers to create and manage content for their students.</li>
+          <li>As well as students being able to interact with the same content.</li>
+          <li>We have been developing the product for over 2 years.</li>
+          <li>It's now a big JavaScript application (2.3MB non-gzipped JS, additional 1MB of libraries)</li>
+          <li>With a test suite of ~4000 tests, takes about 5-10+ minutes to run.</li>
+        </ul>
+      </section>
+      <section>
+        <h1>A bit about &nbsp;<img src="/images/stile-logo.png" class="inline"></h1><img src="/images/StileStack.png" class="stack">
+      </section>
+      <section>
+        <h1>So why am I standing here</h1>
+        <ul>
+          <li>We started with a few flakey tests on our CI server.</li>
+          <li>It wasn't so bad, we reran the CI again and usually passed</li>
+          <li>Over time we had more different flakey tests.</li>
+          <li>Again, it usually all passed on reruns. If first you don't suceed...</li>
+          <li>Occasionally someone would have to "fix" them.</li>
+          <li>Usually the new guy.</li>
+          <li>"Fixing" them was continously running the tests.</li>
+          <li>CI would kindly remind you that it's still not fixed.</li>
+          <li>A few weeks ago our CI server had pass rate of about 30%.</li>
+          <li>We had a serious lack of faith in our test suite.</li>
+          <li>Actual failures were getting lost in the noise.</li>
+          <li>I got the unfortunate job of working out what was going on.</li>
+        </ul>
+      </section>
+      <section>
+        <ul class="no-style">
+          <li>
+            <h1>A week later...</h1><img src="/images/stewie-rocking.gif" class="center">
+          </li>
+          <li>
+            <h1>...I found out that some of our tests sucked!</h1>
+          </li>
+        </ul>
+      </section>
+      <section>
+        <ul class="no-style">
+          <li>
+            <h1>Step 1: Write a test</h1>
+          </li>
+          <li>
+            <pre><code class="language-javascript">// Source file
+function add (a, b) { return a + b; };
+
+// Test file
+describe('test suite', function () {
+  it('should do math', function () {
+    expect(add(1, 3)).to.equal(4);
+  });
+});</code></pre><em>https://github.com/Automattic/expect.js#using-with-a-test-framework</em>
+          </li>
+          <li>
+            <h1>Step 2: Make sure it doesn't suck</h1>
+          </li>
+        </ul>
+      </section>
+      <section>
+        <h1>Realistically your code base probably looks more like</h1>
+        <pre><code class="language-javascript">function flush(model, options) {
+  options = options || {};
+  var syncOpts = { 'autosaving': true };
+  model._$$autosaving = model.sync(model.isNew() ? 'create' : 'update', model, syncOpts)
+    .then(null, function(err) {
+      if (err instanceof UniqueConstraintViolationError) {
+        model.set({'id': err.existingObjectId});
+        
+        if (model.handleUniqueConstraint) {
+          return model.handleUniqueConstraint(err);
+        } else {
+          return model.sync('update', model, syncOpts);
+        }
+      } else if (err instanceof syncErrors.VersionConflictError) {
+        if (model.handleConflict) {
+          return model.handleConflict(err);
+        } else {
+          stile.core.libs.log.error("Version conflict on model with no handler!", {
+              modelAttributes: model.toJSON({all: true}),
+              errorMessage: err.message,
+              updatedState: err.updatedState,
+          });
+          return $.Deferred().reject(err);
+        }
+      } else {
+        model._lastAutosaveFailed = true;
+        model.trigger('autosaveFail');
+        return $.Deferred().reject(err);
+      }
+    })
+    .then(function(res){
+      var setOptions = { autosave: true };
+      
+      model.set({'id': res.id}, setOptions);
+      
+      if (options.adoptServerAttributes) {
+        model.set(res, setOptions);
+      } else if (Array.isArray(model.versionNumberKeys)) {
+        _.each(model.versionNumberKeys, function(key) {
+          if (_.has(res, key)){
+            model.set(key, res[key], setOptions);
+          }
+        });
+      }
+      model.trigger('autosave', res);
+      model._lastAutosaveFailed = false;
+    })
+    .always(function(){
+      model._$$autosaving = null;
+    });
+    
+  return model._$$autosaving;
+}
+</code></pre>
+      </section>
+      <section>
+        <h1>What is a test that doesn't suck?</h1>
+      </section>
+      <section>
+        <h1>A test that doesn't suck is&nbsp;<strong>Fast</strong></h1>
+      </section>
+      <section>
+        <h1>A test that doesn't suck is&nbsp;<strong>Fast</strong></h1>
+        <ul>
+          <li>Not really considered when you start out.</li>
+          <li>Your entire codebase might be 3 or 4 classes and utility functions.</li>
+          <li>The first 10 tests you write are likely to complete in under a second.</li>
+          <li>As the application grows the test suite will have to as well. <br/><br/></li>
+          <li>Ours is currently 4000 or so tests and takes around 5-10 minutes to run.</li>
+          <li>Not unreasonable, it averages 7-16 milliseconds per test. <br/><br/></li>
+          <li>But it's too long to wait between code changes while developing.</li>
+          <li>So tests and code are created in isolation and merged into the code.</li>
+        </ul>
+      </section>
+      <section>
+        <h1>"Why is this taking so long"</h1>
+        <pre><code class="language-javascript">// Source
+var defaultAutoSaveDelay = 1000; //ms
+function autosave(saveCallback) {
+  setTimeout(function(){
+    saveCallback();
+  }, defaultAutoSaveDelay);
+}
+
+// Test File
+describe("when calling autosave", function(){
+  var autosaveCallback;
+  beforeEach(function(done){
+    autosaveCallback = sinon.stub();
+    autosave(autosaveCallback);
+  });
+  it("doesn't save immediately", function(){
+    expect(autosaveCallback).to.not.be.called;
+  });
+  context("after a second", function(){
+    var autosaveCallback;
+    beforeEach(function(done){
+      autosaveCallback = sinon.stub();
+      autosave(autosaveCallback);
+      setTimeout(done, 1001);
+    });
+    it("saves to the server", function(){
+      expect(autosaveCallback).to.be.called;
+    });
+    // ...more tests
+  });
+})</code></pre>
+        <ul>
+          <li>You're waiting 1 second or so per test.</li>
+        </ul>
+      </section>
+      <section>
+        <h1>"Why is this taking so long"</h1>
+        <pre><code class="language-javascript">// Source
+var defaultAutoSaveDelay = 1000; //ms
+function autosave(saveCallback) {
+  setTimeout(function(){
+    saveCallback();
+  }, defaultAutoSaveDelay);
+}
+
+// Test File
+describe("when calling autosave", function(){
+  var autosaveCallback, clock;
+  beforeEach(function(done){
+    clock = sinon.useFakeTimers();
+    autosaveCallback = sinon.stub();
+    autosave(autosaveCallback);
+  });
+  it("doesn't save immediately", function(){
+    expect(autosaveCallback).to.not.be.called;
+  });
+  context("after a second", function(){
+    var autosaveCallback;
+    beforeEach(function(done){
+      autosaveCallback = sinon.stub();
+      autosave(autosaveCallback);
+      clock.tick(1001);
+    });
+    it("saves to the server", function(){
+      expect(autosaveCallback).to.be.called;
+    });
+    // ...more tests
+  });
+})
+</code></pre>
+      </section>
+      <section>
+        <h1>"Why is this taking so long"</h1>
+        <p>While the previous example is contrived. Consider:</p>
+        <pre><code class="language-javascript">// Source
+function updateUI() {
+  render();
+  setTimeout(showTooltip, 0);
+}
+
+// Test
+describe("when updating the UI", function(){
+  beforeEach(function(){
+    updateUI();
+  });
+  it("shows the toolip", function(){
+    expect($('.tooltip')).to.be.visible;
+  });
+});</code></pre>
+        <ul>
+          <li>This test will fail because setTimeout hasn't run.</li>
+        </ul>
+      </section>
+      <section>
+        <h1>A test that doesn't suck is&nbsp;<strong>Readable</strong></h1>
+      </section>
+      <section>
+        <h1>A test that doesn't suck is&nbsp;<strong>Readable</strong></h1>
+        <p>It should be clear about what it's trying to achieve.</p>
+        <pre><code class="language-javascript">describe("when the given user is a student", function() {
+  context("and there are no matching users", function() {
+      it("resolves to an empty array", function() {...});
+  });
+  
+  context("and there is a matching student in the same mob", function() {
+      it("resolves to an empty array", function() {...});
+  });
+  
+  context("and there is a conflicting student in another mob", function() {
+      it("resolves to the conflicting student", function() {...});
+  });
+  
+  context("and there is a matching instructor in the same subject", function() {
+      it("resolves to the conflicting instructor", function() {...});
+  });
+});</code></pre>
+        <ul>
+          <li>Descriptions should describe the behaviour in a clear and concise way.</li>
+          <li>Should follow a structured flow.</li>
+          <li>Will eventually need to be refactored, just like the code.</li>
+        </ul>
+      </section>
+      <section>
+        <h1>"What is this actually testing?"</h1>
+        <pre><code class="language-javascript">context('using server storage', function(){
+  context('should be able to get all values', function () {
+    var $$didComplete = $.Deferred();
+    it('completes', function () {
+      this.serverStorage.getAll().then(function () {
+        $$didComplete.resolve(true)
+      }, function () {
+        $$didComplete.resolve(true);
+      });
+      
+      expect($$didComplete).to.eventually.equal(true);
+    });
+  });
+  
+  context('setting persistent data with `set` and a primitive value', function(){
+    beforeEach(function(){
+      apiStub.put('/api/dev/userData/unitTest.persistentStorageProvider').returns([200, {}]);
+    })
+    it('succeeds', function(){
+      expect(this.serverStorage.set('persistentStorageProvider', 'true', 'unitTest')).not.to.be.undefined;
+    });
+    
+    describe('retrieving the data that was set', function(){
+      it('succeeds', function(){
+        expect(this.serverStorage.get('persistentStorage', 'unitTest')).to.be('true');
+      });
+      
+      describe('unsetting the data that was set', function(){
+        it('succeeds', function(){
+          expect(this.serverStorage.unset('persistentStorage', 'unitTest')).to.be.undefined;
+          expect(this.serverStorage.get('persistentStorage', 'unitTest')).to.be.undefined;
+        });
+      });
+    });
+  });
+});</code></pre>
+        <ul>
+          <li>What does "completes" or "succeeds" actually mean?</li>
+          <li>Tests have no real flow. Previous tests are setting up next tests.</li>
+        </ul>
+      </section>
+      <section>
+        <h1>"What is this actually testing?"</h1>
+        <pre><code class="language-javascript">it('rejects outdated calls', function () {
+  var queueLength;
+  
+  // Put some calls in the queue
+  queueLength = this.queue.queueCall('unitTest.callQueue.queueManagement.queuedCall.1', { value: 1 });
+  expect(queueLength).to.equal(1);
+  expect(this.queue._debug.asyncNext.callCount).to.equal(1);
+  expect(this.queue._debug.reject).to.have.returned(false);
+  
+  queueLength = this.queue.queueCall('unitTest.callQueue.queueManagement.queuedCall.2', { value: 2 });
+  expect(queueLength).to.equal(2);
+  expect(this.queue._debug.asyncNext.callCount).to.equal(2);
+  expect(this.queue._debug.reject).to.have.returned(false);
+  
+  queueLength = this.queue.queueCall('unitTest.callQueue.queueManagement.queuedCall.3', { value: 3 });
+  expect(queueLength).to.equal(3);
+  expect(this.queue._debug.asyncNext.callCount).to.equal(3);
+  expect(this.queue._debug.reject).to.have.returned(false);
+  
+  // Try some overriding calls by using the internal push to push in lower id's
+  queueLength = this.queue._debug.push('unitTest.callQueue.queueManagement.queuedCall.3', { value: 4 }, -1);
+  expect(queueLength).to.equal(3);
+  expect(this.queue._debug.asyncNext.callCount).to.equal(4);
+  expect(this.queue._debug.reject).to.have.returned(true);
+  
+  queueLength = this.queue._debug.push('unitTest.callQueue.queueManagement.queuedCall.2', { value: 5 }, 1);
+  expect(queueLength).to.equal(3);
+  expect(this.queue._debug.asyncNext.callCount).to.equal(5);
+  expect(this.queue._debug.reject).to.have.returned(true);
+  
+  // Try a normal call
+  queueLength = this.queue.queueCall('unitTest.callQueue.queueManagement.queuedCall.4', { value: 6 });
+  expect(queueLength).to.equal(4);
+  expect(this.queue._debug.asyncNext.callCount).to.equal(6);
+  expect(this.queue._debug.reject).to.have.returned(false);
+});</code></pre>
+        <ul>
+          <li>Which part of this is actually the test?</li>
+          <li>Try to keep one expectation per test.</li>
+        </ul>
+      </section>
+      <section>
+        <h1>A test that doesn't suck is&nbsp;<strong>Reliable</strong></h1>
+      </section>
+      <section>
+        <h1>A test that doesn't suck is&nbsp;<strong>Reliable</strong></h1>
+        <ul>
+          <li>It should pass consistently. That's it!</li>
+          <li>It should pass on all of your supported platforms.</li>
+          <li>If you can't rely on your tests, why do you have them?</li>
+          <li>Browser JavaScript are hard to keep reliable.</li>
+          <li>Browser quirks, Asynchronous calls (AJAX, Promises), DOM, Events</li>
+        </ul>
+      </section>
+      <section>
+        <h1>A test that doesn't suck is&nbsp;<strong>Useful</strong></h1>
+      </section>
+      <section>
+        <h1>A test that doesn't suck is&nbsp;<strong>Useful</strong></h1>
+        <ul>
+          <li>It should test the behaviour rather than the implementation.</li>
+          <li>It should be resistant to implementation changes. Backbone vs. React</li>
+          <li>It's better to test larger behaviours over smaller units. If it makes sense. <br><br></li>
+          <li>Unit test complicated behaviours, like larger asynchronous chains.</li>
+          <li>Integration test simplier common behaviours, like View/Model/Event interaction.</li>
+          <li>Large units of behavioural tests are more robust to refactoring<br><br></li>
+          <li>Beware of testing too many small parts, and the underlying frameworks.</li>
+        </ul>
+      </section>
+      <section>
+        <h1>"Is this useful to anyone?"</h1>
+        <pre><code class="language-javascript">describe("when the view is shown in a region", function(){
+  var domRefreshStub, showStub;
+  beforeEach(function(){
+    var view = new Backbone.App.EditResourceItemView({
+      template: function(){return '';},
+      model: new Backbone.Model()
+    });
+    showStub = this.sinon.stub();
+    view.onShow = showStub;
+    domRefreshStub = this.sinon.stub(view, 'onDomRefresh');
+    this.bodyRegion.show(view);
+  });
+  it("should call the `onDomRefresh` event", function(){
+      domRefreshStub.calledOnce.should.be.true;
+  });
+  it("should call the `onShow` event if defined", function(){
+      showStub.calledOnce.should.be.true;
+  });
+});</code></pre>
+        <ul>
+          <li>Stubbing the things that we're trying to test.</li>
+          <li>We've just proven that sinon.stub works.</li>
+          <li>Testing framework specific tests.</li>
+        </ul>
+      </section>
+      <section>
+        <h1>"Is this useful to anyone?"</h1>
+        <p>Here is the two tests from the Marionette framework.</p>
+        <pre><code class="language-javascript">it('should call "onShow" for the view, after the rendered HTML has been added to the DOM', function() {
+  expect(this.viewOnShowSpy).to.have.been.called;
+  expect($(this.view.el)).to.have.$class('onShowClass');
+});
+
+it('should trigger a dom:refresh event', function() {
+  expect(this.onDomRefreshStub).to.have.been.calledTwice;
+});
+</code></pre>
+      </section>
+      <section>
+        <h1>A test that doesn't suck is&nbsp;<strong>Useful</strong></h1>
+        <ul>
+          <li></li>
+          <li></li>
+        </ul>
+      </section>
+      <section>
+        <h1>"I'm not sure it can be tested"</h1><img src="/images/recorder.png" class="browser">
+        <ul>
+          <li>Sometime it's ok to stubbed out whole interfaces.</li>
+          <li>Some interactions are to hard with these types of test runners.</li>
+          <li>Especially complex user-interaction, out of page interactions.</li>
+          <li>Tools like Selenium, Appium can work for user-interaction.</li>
+        </ul>
+      </section>
+      <section>
+        <h1>"I'm not sure it can be tested"</h1>
+        <pre><code class="language-javascript">// Stub interface of the AudioRecorder to to test the views
+// interaction with the recorder without needing browser support
+// or user allowance to access the microphone.
+AudioRecorder = function(){
+  this.recorderType = 'HTMLNative';
+  _.extend(this, Backbone.Events);
+};
+_.extend(
+  AudioRecorder.prototype,
+  {
+    initialize: this.sinon.spy(function(){
+        this.trigger('recorder:init');
+    }),
+    record: this.sinon.spy(function(){
+        this.trigger('recorder:record');
+    }),
+    stop: this.sinon.spy(function(){
+        this.trigger('recorder:stop');
+        return $.Deferred().resolve();
+    }),
+    clear: this.sinon.stub(),
+    getFileBlob: this.sinon.stub().returns(this.$$recordedFileBlob),
+    destroy: this.sinon.stub(),
+    isInState: this.isInStateStub
+  }
+);
+require.stub('audioRecorder/libs/audioRecorder', {
+    AudioRecorder: this.AudioRecorder,
+    recorderType: this.recorderType,
+});</code></pre>
+        <ul>
+          <li>Fake up the interface for the test suite.</li>
+          <li>Manual test the last mile.</li>
+        </ul>
+      </section>
+      <section>
+        <h1>A test that doesn't suck is&nbsp;<strong>Isolated</strong></h1>
+      </section>
+      <section>
+        <h1>A test that doesn't suck is&nbsp;<strong>Isolated</strong></h1>
+        <ul>
+          <li>Was the underlying cause of most of our flakey tests</li>
+          <li>Asynchronous code in scope of the tests was stomping on later tests.</li>
+          <li>Hard to notice early, tests still pass.</li>
+          <li>REST API that were not stubbed, timed out and retried.</li>
+          <li>Holding up the browser because max connections limit was reached.</li>
+        </ul>
+      </section>
+      <section>
+        <h1>"Fire and forget. Asynchronous stomping."</h1>
+        <pre><code class="language-javascript">...
+  onRender: function() {
+    this.$('.value').text(this.model.get('value'));
+    
+    // Fetch additional data
+    $.get('/data').then(null, function(xhr){
+        this.$('.data').text(xhr.responseText);
+    }.bind(this));
+  }
+...
+
+
+// Test
+describe("View", function(){
+  beforeEach(function(){
+    this.model = new Model({value: 42});
+    this.view = new View(this.model);
+  });
+  
+  describe("when the view is rendered", function(){
+    beforeEach(function(){
+      this.view.render();
+    });
+    
+    it("displays the value", function(){
+      var $value = this.view.$('.value');
+      
+      expect($value).to.have.text('42');
+    });
+  });
+});</code></pre>
+      </section>
+      <section>
+        <h1>"Fire and forget. Asynchronous stomping."</h1>
+        <ul>
+          <li>Something in your code will finish asynchronously after the test completes</li>
+          <li>AJAX times out and tries to update the UI.</li>
+          <li>View has been closed and $() no longer availble, it throws an error.</li>
+          <li>Error bubbles up to window and the test runner fails the currently running test.</li>
+        </ul>
+      </section>
+      <section>
+        <h1>So about those flakey tests of ours.</h1><img src="/images/stewie-rocking.gif" class="center">
+      </section>
+      <section>
+        <h1>Finding flakey tests</h1>
+        <ul class="no-style">
+          <li>Delay between each test.</li>
+          <li>
+            <pre><code class="language-javascript">beforeEach(function(done){
+  setTimeout(done, 1000);
+  // ... Everything else
+});</code></pre>
+          </li>
+        </ul>
+      </section>
+      <section>
+        <h1>Finding flakey tests</h1>
+        <ul class="no-style">
+          <li>Bisect. Narrow down to a single file or tests.</li>
+          <li>
+            <pre><code class="language-javascript">describe('timeout', function(){
+  it("waits", function(done){
+    this.timeout(45000);
+  })
+  it("waits more", function(done){
+    this.timeout(45000);
+  })
+});</code></pre>
+          </li>
+          <li>Once there, can make decision on how to solve. Refactor code or test.</li>
+        </ul>
+      </section>
+      <section>
+        <h1>How did we fix them?</h1>
+        <ul>
+          <li>Well... We're still working on it.</li>
+          <li>Most of the tests I found have been skipped.</li>
+          <li>Really awful tests have been deleted.</li>
+          <li>I've added bugs in our tracker so they are looked at again.</li>
+          <li>Better the other 95% of the tests run consistently so we can start to trust them again.</li>
+        </ul>
+      </section>
+      <section>
+        <h1>How did we fix them?</h1>
+        <p>Configured the test runner to try to give every test a consistent sandbox.</p>
+        <pre><code class="language-javascript">beforeEach(function(){
+  this.sinon = sinon.sandbox.create(); // Create a per test sandbox
+  this.testRegion = new Backbone.Marionette.Region({el: document.createElement('div')});
+  this.bodyRegion = new Backbone.Marionette.Region({el: document.createElement('div')});
+  document.body.appendChild(this.bodyRegion.el);
+  
+  //Features/modernizr tests can be automatically copied here and restored in the after each
+  //This makes the test code a bit more readable.
+  originalFeatures = _.clone(window.features);
+  originalModernizr = _.clone(window.Modernizr);
+});
+
+// Reset mockjax stubs after every test
+afterEach(function(){
+  apiStub.clear();
+  $.mockjaxClear();
+  this.testRegion.close();
+  this.bodyRegion.close();
+  $(this.bodyRegion.el).remove();
+  this.sinon.restore();
+  require.clearStubs();
+  
+  //Do some leak testing.
+  //Did we leak any edit views?
+  var openEdits = App.libs.unsaved._getOpenEdits();
+  if (openEdits.length > 0) {
+    //There are edit views which have not been closed
+    //This causes browsers to pop up an alert on window.onbeforeunload
+    //this then makes karma loose contact with phantomJS, aborting the test run
+    throw new Error('TEST ERROR: An edit view was leaked');
+  }
+  
+  window.features = originalFeatures;
+  window.Modernizr = originalModernizr;
+});
+</code></pre>
+      </section>
+      <section>
+        <h1>How did we fix them?</h1>
+        <ul>
+          <li>Created some tooling to reduce test clutter.</li>
+          <li>Also made them easier to use than writing poor tests.</li>
+          <li>let();</li>
+          <li>apiStub;</li>
+          <li>CommonJS stub;</li>
+          <li>Makes it harder to write tests that suck.</li>
+        </ul>
+      </section>
+      <section>
+        <h1>How did we fix them?</h1>
+        <pre><code class="language-javascript">let('model', function(){
+    return new Backbone.Model();
+});</code></pre>
+        <p>Other frameworks have implementations of this</p>
+        <pre><code class="language-javascript">apiStub.get('/api/model/1').returns([200, {id: 1, name: "MyModel"}]);</code></pre>
+        <p>Tried sinon's FakeServer, $.mockjax and found them cumbersome to setup and use.</p>
+        <pre><code class="language-javascript">require.stub('audioRecorder/libs/audioRecorder', {
+    AudioRecorder: this.AudioRecorder,
+    recorderType: this.recorderType,
+});
+</code></pre>
+      </section>
+      <section>
+        <h1>Some old tests...</h1>
+        <pre><code class="language-javascript">describe("application/views/institutionView", function(){
+  var model, view, dupeSubject;
+  
+  beforeEach(function(){
+      $el = $('<div></div>', {"id": 'testRegion'}).appendTo('body');
+      App.addRegions({
+          testRegion: '#testRegion'
+      });
+      
+      model = new App.models.Institution({id:42},{endpoint: 'dev'});
+      view = new App.views.Institution({
+          model: model
+      });
+      
+      App.testRegion.show(view);
+  });
+  afterEach(function(){
+      model.trigger('destroy', model);
+      App.removeRegion('testRegion');
+  });
+  
+  describe('when rendering the view', function(){
+      var syncStub, setBannerStub, featureEnabledDefault;
+      beforeEach(function(){
+          featureEnabledDefault = window.features.duplicateSubject;
+          window.features.duplicateSubject = true;
+          
+          syncStub = sinon.stub(view, '_syncPendingDuplicateSubjects');
+          setBannerStub = sinon.stub(view, '_setBannerImage');
+          App.testRegion.show(view);
+          //just because/needed to set banner image
+          view.onPageLoaded();
+      });
+      afterEach(function(){
+          syncStub.restore();
+          setBannerStub.restore();
+          window.features.duplicateSubject = featureEnabledDefault;
+      });
+      it('should attempt to sync pending duplicate subjects', function(){
+          expect(syncStub).to.be.calledOnce;
+      });
+      it('should attempt to set the banner image', function(){
+          expect(setBannerStub).to.be.calledOnce;
+      });
+  });
+  </code></pre>
+      </section>
+      <section>
+        <h1>Writing tests that don't suck</h1>
+        <pre><code class="language-javascript">describe('#createRecoveryPassword()', function(){
+    let("model", function(){
+        var model = new stile.core.models.User({
+            id: 77,
+            firstName: 'Bob',
+            lastName: 'Manuser',
+            email: 'bob.manuser@example.com'
+        });
+        model.endpoint = 'test';
+        
+        return model;
+    });
+    let("apiResponse", function(){
+        return [201, {
+          "recoveryPassword": "ugj5fvqcka"
+        }];
+    })
+    beforeEach(function(){
+        this.request = apiStub.post('/users/77/recoveryPassword').returns(this.apiResponse);
+        this.result = this.model.createRecoveryPassword();
+    });
+    it("returns a promise", function(){
+        expect(this.result).to.respondTo('then');
+    });
+    it("calls the API", function(){
+        expect(this.request).to.be.calledOnce;
+    });
+    context("when the API request succeeds", function(){
+        it("resolves the promise", function(){
+            return expect(this.result).to.eventually.have.property("recoveryPassword");
+        });
+    })
+    context("when the API request fails", function(){
+        let("apiResponse", function(){
+            return [500, {}];
+        })
+        it("rejects the promise", function(){
+            return expect(this.result).to.be.rejected;
+        });
+    })
+})
+</code></pre>
+      </section>
+      <section>
+        <h1>Writing tests that don't suck</h1>
+        <pre><code class="language-javascript">describe("widgetQuestionMultipleChoice/views/questionMultipleChoiceAnswersListEditView", function(){
+  let("model", function(){
+      return new App.models.QuestionMultipleChoiceItem({
+          multipleChoiceAnswers: this.multipleChoiceAnswers
+      });
+  });
+  let("collection", function(){
+      return this.model.get('multipleChoiceAnswers');
+  });
+  let("view", function(){
+      return new QuestionMultipleChoiceAnswersListView({
+          model: this.model,
+          collection: this.collection
+      });
+  });
+  
+  beforeEach(function(){
+      this.testRegion.show(this.view);
+  });
+  
+  describe("when showing the view", function(){
+      context("and the question has no existing answers", function(){
+          it("show 5 item views", function(){
+              expect(this.view.children.length).to.equal(5);
+          })
+      });
+      
+      context("and the question has less the 5 existing answers", function(){
+          let("multipleChoiceAnswers", function(){
+              return [
+                  {text: 'Answer 1'},
+                  {text: 'Answer 2'},
+                  {text: 'Answer 3'},
+              ]
+          });
+          it("shows 5 item views", function(){
+              expect(this.view.children.length).to.equal(5);
+          })
+      });
+      
+      context("and the question has 5 or more existing answers", function(){
+          let("multipleChoiceAnswers", function(){
+              return [
+                  {text: 'Answer 1'},
+                  {text: 'Answer 2'},
+                  {text: 'Answer 3'},
+                  {text: 'Answer 4'},
+                  {text: 'Answer 5'},
+              ]
+          });
+          it("shows an extra blank item view", function(){
+              expect(this.view.children.length).to.equal(6);
+              expect(this.view.children.last().model.get('text')).to.not.exist;
+          });
+      })
+  });
+});</code></pre>
+      </section>
+      <section>
+        <h1>Keeping up the quality</h1>
+        <ul>
+          <li>Make it a code review focus. If the tests look useful and they're passing chances are the code is too.</li>
+          <li>It's hard because the test files are often long and tedious to read.</li>
+          <li>Not a substitute for actually reviewing the code.</li>
+        </ul>
+        <pre><code class="language-javascript">// Source file
+function add (a, b) { return 4; };
+
+// Test file
+describe('test suite', function () {
+  it('should do math', function () {
+    expect(add(1, 3)).to.equal(4);
+  });
+});</code></pre>
+      </section>
+      <section>
+        <h1>Keeping up the quality</h1>
+        <ul>
+          <li>Run a CI environment. Especially if the test runner takes a while to complete.</li>
+          <li>Run the test suite across all supported browsers using tools like Saucelabs.</li>
+          <li>Fail tests if things aren't cleaned up/stubbed correctly. DO THIS EARLY!</li>
+          <li>Behaviour driven development - minimal tests/code for behaviour.</li>
+          <li>Might start with more code, but easier to refactor because testing behaviour.</li>
+        </ul>
+      </section>
+      <section>
+        <h1>Keeping up the quality</h1>
+        <ul>
+          <li>Randomizing the execution order of tests.</li>
+          <li>JSHint your tests - leaky globals, etc.</li>
+          <li>GitHub pull-request hooks with CI.</li>
+        </ul>
+      </section>
+      <section>
+        <h1>Questions at the bar...</h1>
+      </section>
+    </article>
+    <script src="build/build.js"></script>
+  </body>
+</html>
